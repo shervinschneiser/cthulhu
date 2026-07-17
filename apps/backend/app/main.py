@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from app.core.logging import configure_logging
 from app.middleware import RequestIDMiddleware
 
+from app.api.health import router as health_router
+
 configure_logging()
 
 app = FastAPI(
@@ -10,6 +12,8 @@ app = FastAPI(
 )
 
 app.add_middleware(RequestIDMiddleware)
+
+app.include_router(health_router)
 
 
 @app.get("/")
