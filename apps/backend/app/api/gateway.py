@@ -30,7 +30,8 @@ async def gateway(request: Request, path: str):
     try:
         route = dispatcher.dispatch(f"/{path}")
 
-        upstream_url = f"{route.upstream.rstrip('/')}/{path}"
+        remaining_path = path.removeprefix(route.path.lstrip("/"))
+        upstream_url = f"{route.upstream.rstrip('/')}/{remaining_path.lstrip('/')}"
 
         response = await proxy.forward(
             method=request.method,
