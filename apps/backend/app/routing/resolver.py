@@ -10,7 +10,9 @@ class RouteResolver:
         matched_route: Route | None = None
 
         for route in self._registry.all():
-            if path == route.path or path.startswith(f"{route.path}/"):
+            if path == route.normalized_path or path.startswith(
+                f"{route.normalized_path}/"
+            ):
                 if matched_route is None or len(route.path) > len(matched_route.path):
                     matched_route = route
 
