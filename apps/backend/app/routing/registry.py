@@ -17,5 +17,8 @@ class RouteRegistry:
             None,
         )
 
+    def remove(self, path: str) -> None:
+        self._routes = [route for route in self._routes if route.path != path]
+
     def all(self) -> list[Route]:
         return self._routes.copy()
