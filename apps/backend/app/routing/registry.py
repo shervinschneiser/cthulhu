@@ -11,5 +11,11 @@ class RouteRegistry:
 
         self._routes.append(route)
 
+    def find(self, path: str) -> Route | None:
+        return next(
+            (route for route in self._routes if route.path == path),
+            None,
+        )
+
     def all(self) -> list[Route]:
         return self._routes.copy()
