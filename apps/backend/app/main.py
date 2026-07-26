@@ -5,11 +5,14 @@ from app.middleware import RequestIDMiddleware
 from app.api.health import router as health_router
 from app.api.gateway import router as gateway_router
 
+from app.core.constants import APP_NAME, APP_VERSION
+
+
 configure_logging()
 
 app = FastAPI(
-    title="Cthulhu API Gateway",
-    version="0.1.0",
+    title=APP_NAME,
+    version=APP_VERSION,
 )
 
 app.add_middleware(RequestIDMiddleware)
