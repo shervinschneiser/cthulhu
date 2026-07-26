@@ -17,6 +17,9 @@ class RouteRegistry:
             None,
         )
 
+    def count(self) -> int:
+        return len(self._routes)
+
     def remove(self, path: str) -> None:
         self._routes = [route for route in self._routes if route.path != path]
 
