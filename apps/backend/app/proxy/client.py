@@ -1,11 +1,24 @@
-from app.core.config import settings
 from collections.abc import Mapping
 
 import httpx
 
+from app.core.config import settings
+
+HOP_BY_HOP_HEADERS = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+}
+
 
 class ProxyClient:
-    def __init__(self, timeout: float = 30.0) -> None:
+    def __init__(self) -> None:
         self._client = httpx.AsyncClient(
             timeout=settings.proxy_timeout,
             follow_redirects=False,
@@ -20,10 +33,16 @@ class ProxyClient:
         params: Mapping[str, str],
         content: bytes,
     ) -> httpx.Response:
+        filtered_headers = {
+            key: value
+            for key, value in headers.items()
+            if key.lower() not in HOP_BY_HOP_HEADERS
+        }
+
         return await self._client.request(
             method=method,
             url=url,
-            headers=headers,
+            headers=filtered_headers,
             params=params,
             content=content,
         )
