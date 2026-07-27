@@ -39,13 +39,16 @@ class ProxyClient:
             if key.lower() not in HOP_BY_HOP_HEADERS
         }
 
-        return await self._client.request(
-            method=method,
-            url=url,
-            headers=filtered_headers,
-            params=params,
-            content=content,
-        )
+        try:
+            return await self._client.request(
+                method=method,
+                url=url,
+                headers=filtered_headers,
+                params=params,
+                content=content,
+            )
+        except (httpx.ConnectError, httpx.ReadTimeout) as exc:
+            raise RuntimeError("Upstream service unavailable") from exc
 
     async def close(self) -> None:
         await self._client.aclose()
