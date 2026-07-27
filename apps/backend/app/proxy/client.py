@@ -1,3 +1,4 @@
+from app.core.config import settings
 from collections.abc import Mapping
 
 import httpx
@@ -6,7 +7,7 @@ import httpx
 class ProxyClient:
     def __init__(self, timeout: float = 30.0) -> None:
         self._client = httpx.AsyncClient(
-            timeout=timeout,
+            timeout=settings.proxy_timeout,
             follow_redirects=False,
         )
 
