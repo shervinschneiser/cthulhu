@@ -39,6 +39,11 @@ class ProxyClient:
             if key.lower() not in HOP_BY_HOP_HEADERS
         }
 
+        filtered_headers.setdefault(
+            "user-agent",
+            "Cthulhu-Gateway/0.1.0",
+        )
+
         try:
             return await self._client.request(
                 method=method,
