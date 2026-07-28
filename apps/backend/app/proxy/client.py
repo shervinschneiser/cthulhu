@@ -44,6 +44,11 @@ class ProxyClient:
             "Cthulhu-Gateway/0.1.0",
         )
 
+        client_ip = headers.get("x-forwarded-for") or headers.get("x-real-ip")
+
+        if client_ip:
+            filtered_headers["x-forwarded-for"] = client_ip
+
         try:
             return await self._client.request(
                 method=method,
