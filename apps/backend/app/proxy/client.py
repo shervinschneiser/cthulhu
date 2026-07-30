@@ -49,6 +49,11 @@ class ProxyClient:
         if client_ip:
             filtered_headers["x-forwarded-for"] = client_ip
 
+        original_host = headers.get("host")
+
+        if original_host:
+            filtered_headers["x-forwarded-host"] = original_host
+
         try:
             return await self._client.request(
                 method=method,
