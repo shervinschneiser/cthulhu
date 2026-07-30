@@ -54,6 +54,9 @@ class ProxyClient:
         if original_host:
             filtered_headers["x-forwarded-host"] = original_host
 
+        if "x-forwarded-proto" not in filtered_headers:
+            filtered_headers["x-forwarded-proto"] = "http"
+
         try:
             return await self._client.request(
                 method=method,
