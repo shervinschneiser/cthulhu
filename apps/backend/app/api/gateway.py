@@ -7,6 +7,8 @@ from app.routing.exceptions import RouteNotFoundError
 from app.routing.resolver import RouteResolver
 from app.proxy.utils import normalize_upstream
 
+from app.gateway.constants import SUPPORTED_METHODS
+
 router = APIRouter(tags=["Gateway"])
 
 registry = RouteRegistry()
@@ -25,7 +27,7 @@ proxy = ProxyClient()
 
 @router.api_route(
     "/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    methods=SUPPORTED_METHODS,
 )
 async def gateway(request: Request, path: str):
     try:
