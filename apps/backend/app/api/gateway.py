@@ -5,6 +5,7 @@ from app.proxy.client import ProxyClient
 from app.routing import Route, RouteRegistry
 from app.routing.exceptions import RouteNotFoundError
 from app.routing.resolver import RouteResolver
+from app.proxy.utils import normalize_upstream
 
 router = APIRouter(tags=["Gateway"])
 
@@ -31,7 +32,7 @@ async def gateway(request: Request, path: str):
         route = dispatcher.dispatch(f"/{path}")
 
         remaining_path = path.removeprefix(route.path.lstrip("/"))
-        upstream_url = f"{route.upstream.rstrip('/')}/{remaining_path.lstrip('/')}"
+        upstream_url = f"{normalize_upstream(route.upstream)}/{remaining_path.lstrip('/')}"
 
         response = await proxy.forward(
             method=request.method,
