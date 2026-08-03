@@ -5,8 +5,11 @@ class RouteRegistry:
     def __init__(self) -> None:
         self._routes: list[Route] = []
 
+    def exists(self, path: str) -> bool:
+        return any(route.path == path for route in self._routes)
+
     def register(self, route: Route) -> None:
-        if any(item.path == route.path for item in self._routes):
+        if self.exists(route.path):
             raise ValueError(f"Route '{route.path}' already exists.")
 
         self._routes.append(route)
