@@ -5,6 +5,8 @@ import httpx
 from app.core.config import settings
 from app.proxy.exceptions import UpstreamUnavailableError
 
+from exceptions import ProxyTimeoutError
+
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -66,8 +68,10 @@ class ProxyClient:
                 params=params,
                 content=content,
             )
-        except (httpx.ConnectError, httpx.ReadTimeout) as exc:
-            raise UpstreamUnavailableError("Upstream service unavailable") from exc
+        except httpx.ConnectError as exc:
+            raise UpstreamUnavailableError() from exc
+        except httpx.ReadTimeout as exc:
+            raise ProxyTimeoutError() from exc
 
     async def close(self) -> None:
         await self._client.aclose()

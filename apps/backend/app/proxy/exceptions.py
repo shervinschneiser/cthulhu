@@ -1,2 +1,2 @@
-class UpstreamUnavailableError(Exception):
-    """Raised when the upstream service cannot be reached."""
+class ProxyTimeoutError(Exception):
+    """Raised when an upstream request times out."""
