@@ -6,6 +6,7 @@ from app.routing import Route, RouteRegistry
 from app.routing.exceptions import RouteNotFoundError
 from app.routing.resolver import RouteResolver
 from app.proxy.utils import normalize_upstream
+from app.proxy.url_builder import build_upstream_url
 
 from app.gateway.constants import SUPPORTED_METHODS
 
@@ -34,7 +35,8 @@ async def gateway(request: Request, path: str):
         route = dispatcher.dispatch(f"/{path}")
 
         remaining_path = path.removeprefix(route.path.lstrip("/"))
-        upstream_url = f"{normalize_upstream(route.upstream)}/{remaining_path.lstrip('/')}"
+        # upstream_url = f"{normalize_upstream(route.upstream)}/{remaining_path.lstrip('/')}"
+        upstream_url = build_upstream_url(route.upstream, path)
 
         response = await proxy.forward(
             method=request.method,
