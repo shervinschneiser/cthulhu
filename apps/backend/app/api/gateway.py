@@ -8,6 +8,9 @@ from app.routing.resolver import RouteResolver
 from app.proxy.utils import normalize_upstream
 from app.proxy.url_builder import build_upstream_url
 
+from app.core.redis import redis_client
+from app.rate_limit.limiter import RateLimiter
+
 from app.gateway.constants import SUPPORTED_METHODS
 
 router = APIRouter(tags=["Gateway"])
@@ -24,6 +27,7 @@ resolver = RouteResolver(registry)
 dispatcher = GatewayDispatcher(resolver)
 
 proxy = ProxyClient()
+rate_limiter = RateLimiter(redis_client, limit=100)
 
 
 @router.api_route(
@@ -31,6 +35,14 @@ proxy = ProxyClient()
     methods=SUPPORTED_METHODS,
 )
 async def gateway(request: Request, path: str):
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not await rate_limiter.allow(f"rate-limit:{client_ip}"):
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded",
+        )
+
     try:
         route = dispatcher.dispatch(f"/{path}")
 
