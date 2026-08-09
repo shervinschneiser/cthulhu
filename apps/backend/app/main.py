@@ -1,18 +1,28 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
+from app.api.gateway import proxy
+from app.api.gateway import router as gateway_router
+from app.api.health import router as health_router
+from app.core.constants import APP_NAME, APP_VERSION
 from app.core.logging import configure_logging
 from app.middleware import RequestIDMiddleware
-
-from app.api.health import router as health_router
-from app.api.gateway import router as gateway_router
-
-from app.core.constants import APP_NAME, APP_VERSION
 
 
 configure_logging()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await proxy.close()
+
+
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
+    lifespan=lifespan,
 )
 
 app.add_middleware(RequestIDMiddleware)
