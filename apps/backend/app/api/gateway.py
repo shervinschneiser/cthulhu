@@ -1,27 +1,32 @@
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
+from app.gateway.constants import SUPPORTED_METHODS
 from app.proxy.client import ProxyClient
+from app.proxy.exceptions import (
+    ProxyTimeoutError,
+    UpstreamUnavailableError,
+)
+from app.proxy.url_builder import build_upstream_url
+from app.rate_limit.limiter import RateLimiter
 from app.routing import Route, RouteRegistry
 from app.routing.exceptions import RouteNotFoundError
 from app.routing.resolver import RouteResolver
-from app.proxy.utils import normalize_upstream
-from app.proxy.url_builder import build_upstream_url
 
-from app.core.redis import redis_client
-from app.rate_limit.limiter import RateLimiter
-
-from app.gateway.constants import SUPPORTED_METHODS
 
 router = APIRouter(tags=["Gateway"])
 
+
 registry = RouteRegistry()
+
 registry.register(
     Route(
         path="/users",
         upstream="http://localhost:9000",
     )
 )
+
 
 resolver = RouteResolver(registry)
 dispatcher = GatewayDispatcher(resolver)
@@ -35,8 +40,8 @@ rate_limiter = RateLimiter(redis_client, limit=100)
     methods=SUPPORTED_METHODS,
 )
 async def gateway(request: Request, path: str):
-
     client_ip = request.client.host if request.client else "unknown"
+
     if not await rate_limiter.allow(f"rate-limit:{client_ip}"):
         raise HTTPException(
             status_code=429,
@@ -46,9 +51,10 @@ async def gateway(request: Request, path: str):
     try:
         route = dispatcher.dispatch(f"/{path}")
 
-        remaining_path = path.removeprefix(route.path.lstrip("/"))
-        # upstream_url = f"{normalize_upstream(route.upstream)}/{remaining_path.lstrip('/')}"
-        upstream_url = build_upstream_url(route.upstream, path)
+        upstream_url = build_upstream_url(
+            route.upstream,
+            path,
+        )
 
         response = await proxy.forward(
             method=request.method,
@@ -85,4 +91,16 @@ async def gateway(request: Request, path: str):
         raise HTTPException(
             status_code=404,
             detail=str(exc),
+        ) from exc
+
+    except ProxyTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Upstream request timed out",
+        ) from exc
+
+    except UpstreamUnavailableError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Upstream service unavailable",
         ) from exc
