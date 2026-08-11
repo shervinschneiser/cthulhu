@@ -3,9 +3,12 @@ from collections.abc import Mapping
 import httpx
 
 from app.core.config import settings
-from app.proxy.exceptions import UpstreamUnavailableError
+from app.proxy.exceptions import (
+    ProxyTimeoutError,
+    UpstreamUnavailableError,
+)
+from app.proxy.retry import retry_request
 
-from exceptions import ProxyTimeoutError
 
 HOP_BY_HOP_HEADERS = {
     "connection",
@@ -60,13 +63,20 @@ class ProxyClient:
         if "x-forwarded-proto" not in filtered_headers:
             filtered_headers["x-forwarded-proto"] = "http"
 
-        try:
+        async def send_request() -> httpx.Response:
             return await self._client.request(
                 method=method,
                 url=url,
                 headers=filtered_headers,
                 params=params,
                 content=content,
+            )
+
+        try:
+            return await retry_request(
+                send_request,
+                method=method,
+                retries=2,
             )
         except httpx.ConnectError as exc:
             raise UpstreamUnavailableError() from exc
