@@ -23,7 +23,10 @@ registry = RouteRegistry()
 registry.register(
     Route(
         path="/users",
-        upstream="http://localhost:9000",
+        upstreams=(
+            "http://localhost:9000",
+            "http://localhost:9001",
+        ),
     )
 )
 
