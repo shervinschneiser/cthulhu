@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
 from app.gateway.constants import SUPPORTED_METHODS
+from app.gateway.load_balancer import LoadBalancer
 from app.proxy.client import ProxyClient
 from app.proxy.exceptions import (
     ProxyTimeoutError,
@@ -35,14 +36,30 @@ resolver = RouteResolver(registry)
 dispatcher = GatewayDispatcher(resolver)
 
 proxy = ProxyClient()
-rate_limiter = RateLimiter(redis_client, limit=100)
+
+rate_limiter = RateLimiter(
+    redis_client,
+    limit=100,
+)
+
+load_balancers: dict[str, LoadBalancer] = {
+    "/users": LoadBalancer(
+        (
+            "http://localhost:9000",
+            "http://localhost:9001",
+        )
+    ),
+}
 
 
 @router.api_route(
     "/{path:path}",
     methods=SUPPORTED_METHODS,
 )
-async def gateway(request: Request, path: str):
+async def gateway(
+    request: Request,
+    path: str,
+):
     client_ip = request.client.host if request.client else "unknown"
 
     if not await rate_limiter.allow(f"rate-limit:{client_ip}"):
@@ -54,8 +71,18 @@ async def gateway(request: Request, path: str):
     try:
         route = dispatcher.dispatch(f"/{path}")
 
+        load_balancer = load_balancers.get(route.normalized_path)
+
+        if load_balancer is None:
+            raise HTTPException(
+                status_code=502,
+                detail="No upstream configured",
+            )
+
+        upstream = load_balancer.next()
+
         upstream_url = build_upstream_url(
-            route.upstream,
+            upstream,
             path,
         )
 
