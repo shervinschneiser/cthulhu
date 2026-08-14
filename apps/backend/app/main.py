@@ -9,6 +9,7 @@ from app.core.constants import APP_NAME, APP_VERSION
 from app.core.logging import configure_logging
 from app.middleware import RequestIDMiddleware
 
+from app.middleware.request_logging import RequestLoggingMiddleware
 
 configure_logging()
 
@@ -26,6 +27,7 @@ app = FastAPI(
 )
 
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(health_router)
 app.include_router(gateway_router)
