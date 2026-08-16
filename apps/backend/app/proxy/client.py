@@ -3,6 +3,7 @@ from collections.abc import Mapping
 import httpx
 
 from app.core.config import settings
+from app.gateway.circuit_breaker import CircuitBreaker
 from app.proxy.exceptions import (
     ProxyTimeoutError,
     UpstreamUnavailableError,
@@ -29,6 +30,7 @@ class ProxyClient:
             timeout=settings.proxy_timeout,
             follow_redirects=False,
         )
+        self._circuit_breaker = CircuitBreaker()
 
     async def forward(
         self,
@@ -39,6 +41,9 @@ class ProxyClient:
         params: Mapping[str, str],
         content: bytes,
     ) -> httpx.Response:
+        if not self._circuit_breaker.allow_request():
+            raise UpstreamUnavailableError("Circuit breaker is open")
+
         filtered_headers = {
             key: value
             for key, value in headers.items()
@@ -60,8 +65,10 @@ class ProxyClient:
         if original_host:
             filtered_headers["x-forwarded-host"] = original_host
 
-        if "x-forwarded-proto" not in filtered_headers:
-            filtered_headers["x-forwarded-proto"] = "http"
+        filtered_headers.setdefault(
+            "x-forwarded-proto",
+            "http",
+        )
 
         async def send_request() -> httpx.Response:
             return await self._client.request(
@@ -73,14 +80,22 @@ class ProxyClient:
             )
 
         try:
-            return await retry_request(
+            response = await retry_request(
                 send_request,
                 method=method,
                 retries=2,
             )
+
+            self._circuit_breaker.record_success()
+
+            return response
+
         except httpx.ConnectError as exc:
+            self._circuit_breaker.record_failure()
             raise UpstreamUnavailableError() from exc
+
         except httpx.ReadTimeout as exc:
+            self._circuit_breaker.record_failure()
             raise ProxyTimeoutError() from exc
 
     async def close(self) -> None:
