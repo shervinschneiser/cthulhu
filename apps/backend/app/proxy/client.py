@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 
 import httpx
 
@@ -32,18 +32,10 @@ class ProxyClient:
         )
         self._circuit_breaker = CircuitBreaker()
 
-    async def forward(
+    def _prepare_headers(
         self,
-        *,
-        method: str,
-        url: str,
         headers: Mapping[str, str],
-        params: Mapping[str, str],
-        content: bytes,
-    ) -> httpx.Response:
-        if not self._circuit_breaker.allow_request():
-            raise UpstreamUnavailableError("Circuit breaker is open")
-
+    ) -> dict[str, str]:
         filtered_headers = {
             key: value
             for key, value in headers.items()
@@ -70,6 +62,22 @@ class ProxyClient:
             "http",
         )
 
+        return filtered_headers
+
+    async def forward(
+        self,
+        *,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
+        content: bytes,
+    ) -> httpx.Response:
+        if not self._circuit_breaker.allow_request():
+            raise UpstreamUnavailableError("Circuit breaker is open")
+
+        filtered_headers = self._prepare_headers(headers)
+
         async def send_request() -> httpx.Response:
             return await self._client.request(
                 method=method,
@@ -89,6 +97,46 @@ class ProxyClient:
             self._circuit_breaker.record_success()
 
             return response
+
+        except httpx.ConnectError as exc:
+            self._circuit_breaker.record_failure()
+            raise UpstreamUnavailableError() from exc
+
+        except httpx.ReadTimeout as exc:
+            self._circuit_breaker.record_failure()
+            raise ProxyTimeoutError() from exc
+
+    async def stream(
+        self,
+        *,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
+        content: bytes,
+    ) -> tuple[httpx.Response, AsyncIterator[bytes]]:
+        if not self._circuit_breaker.allow_request():
+            raise UpstreamUnavailableError("Circuit breaker is open")
+
+        filtered_headers = self._prepare_headers(headers)
+
+        try:
+            request = self._client.build_request(
+                method=method,
+                url=url,
+                headers=filtered_headers,
+                params=params,
+                content=content,
+            )
+
+            response = await self._client.send(
+                request,
+                stream=True,
+            )
+
+            self._circuit_breaker.record_success()
+
+            return response, response.aiter_bytes()
 
         except httpx.ConnectError as exc:
             self._circuit_breaker.record_failure()
