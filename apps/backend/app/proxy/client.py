@@ -113,7 +113,7 @@ class ProxyClient:
         url: str,
         headers: Mapping[str, str],
         params: Mapping[str, str],
-        content: bytes,
+        content: AsyncIterator[bytes],
     ) -> tuple[httpx.Response, AsyncIterator[bytes]]:
         if not self._circuit_breaker.allow_request():
             raise UpstreamUnavailableError("Circuit breaker is open")
