@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
-from app.gateway.constants import SUPPORTED_METHODS
 from app.gateway.load_balancer import LoadBalancer
+from app.gateway.constants import SUPPORTED_METHODS
 from app.proxy.client import ProxyClient
 from app.proxy.exceptions import (
     ProxyTimeoutError,
@@ -86,7 +87,7 @@ async def gateway(
             path,
         )
 
-        response = await proxy.forward(
+        response, stream = await proxy.stream(
             method=request.method,
             url=upstream_url,
             headers={
@@ -110,8 +111,8 @@ async def gateway(
             if key.lower() not in excluded_headers
         }
 
-        return Response(
-            content=response.content,
+        return StreamingResponse(
+            stream,
             status_code=response.status_code,
             headers=headers,
             media_type=response.headers.get("content-type"),
