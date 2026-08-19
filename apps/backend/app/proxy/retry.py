@@ -1,8 +1,14 @@
 from collections.abc import Awaitable, Callable
 
+import asyncio
 import httpx
 
-RETRYABLE_METHODS = {"GET", "HEAD", "OPTIONS", "PUT", "DELETE"}
+
+RETRYABLE_METHODS = {
+    "GET",
+    "HEAD",
+    "OPTIONS",
+}
 
 
 async def retry_request(
@@ -11,13 +17,21 @@ async def retry_request(
     method: str,
     retries: int = 2,
 ) -> httpx.Response:
-    attempts = 0
+    if method.upper() not in RETRYABLE_METHODS:
+        return await request()
 
-    while True:
+    last_error: Exception | None = None
+
+    for attempt in range(retries + 1):
         try:
             return await request()
-        except (httpx.ConnectError, httpx.ReadTimeout):
-            if method.upper() not in RETRYABLE_METHODS or attempts >= retries:
+
+        except (httpx.ConnectError, httpx.ReadTimeout) as exc:
+            last_error = exc
+
+            if attempt >= retries:
                 raise
 
-            attempts += 1
+            await asyncio.sleep(0.1 * (2**attempt))
+
+    raise RuntimeError("Retry failed") from last_error
