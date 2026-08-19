@@ -134,9 +134,16 @@ class ProxyClient:
                 stream=True,
             )
 
+            async def response_stream() -> AsyncIterator[bytes]:
+                try:
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+                finally:
+                    await response.aclose()
+
             self._circuit_breaker.record_success()
 
-            return response, response.aiter_bytes()
+            return response, response_stream()
 
         except httpx.ConnectError as exc:
             self._circuit_breaker.record_failure()
