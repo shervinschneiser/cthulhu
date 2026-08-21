@@ -1,6 +1,6 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 
-import asyncio
 import httpx
 
 
@@ -8,6 +8,12 @@ RETRYABLE_METHODS = {
     "GET",
     "HEAD",
     "OPTIONS",
+}
+
+RETRYABLE_STATUS_CODES = {
+    502,
+    503,
+    504,
 }
 
 
@@ -24,7 +30,15 @@ async def retry_request(
 
     for attempt in range(retries + 1):
         try:
-            return await request()
+            response = await request()
+
+            if response.status_code not in RETRYABLE_STATUS_CODES:
+                return response
+
+            if attempt >= retries:
+                return response
+
+            await response.aclose()
 
         except (httpx.ConnectError, httpx.ReadTimeout) as exc:
             last_error = exc
@@ -32,6 +46,6 @@ async def retry_request(
             if attempt >= retries:
                 raise
 
-            await asyncio.sleep(0.1 * (2**attempt))
+        await asyncio.sleep(0.1 * (2**attempt))
 
     raise RuntimeError("Retry failed") from last_error
