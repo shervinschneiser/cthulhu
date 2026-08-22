@@ -3,14 +3,15 @@ from fastapi.responses import StreamingResponse
 
 from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
-from app.gateway.load_balancer import LoadBalancer
 from app.gateway.constants import SUPPORTED_METHODS
+from app.gateway.load_balancer import LoadBalancer
 from app.proxy.client import ProxyClient
 from app.proxy.exceptions import (
     ProxyTimeoutError,
     UpstreamUnavailableError,
 )
 from app.proxy.url_builder import build_upstream_url
+from app.rate_limit.key import get_rate_limit_key
 from app.rate_limit.limiter import RateLimiter
 from app.routing import Route, RouteRegistry
 from app.routing.exceptions import RouteNotFoundError
@@ -18,7 +19,6 @@ from app.routing.resolver import RouteResolver
 
 
 router = APIRouter(tags=["Gateway"])
-
 
 registry = RouteRegistry()
 
@@ -31,7 +31,6 @@ registry.register(
         ),
     )
 )
-
 
 resolver = RouteResolver(registry)
 dispatcher = GatewayDispatcher(resolver)
@@ -61,16 +60,19 @@ async def gateway(
     request: Request,
     path: str,
 ):
-    client_ip = request.client.host if request.client else "unknown"
-
-    if not await rate_limiter.allow(f"rate-limit:{client_ip}"):
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded",
-        )
-
     try:
         route = dispatcher.dispatch(f"/{path}")
+
+        rate_limit_key = get_rate_limit_key(
+            request,
+            route.normalized_path,
+        )
+
+        if not await rate_limiter.allow(rate_limit_key):
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded",
+            )
 
         load_balancer = load_balancers.get(route.normalized_path)
 
@@ -96,7 +98,7 @@ async def gateway(
                 if key.lower() != "host"
             },
             params=dict(request.query_params),
-            content=await request.body(),
+            content=request.stream(),
         )
 
         excluded_headers = {
