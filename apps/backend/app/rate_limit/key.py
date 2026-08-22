@@ -1,13 +1,20 @@
 from fastapi import Request
 
 
-def get_rate_limit_key(request: Request) -> str:
+def get_rate_limit_key(
+    request: Request,
+    route_path: str | None = None,
+) -> str:
     api_key = request.headers.get("x-api-key")
 
     if api_key:
-        return f"api-key:{api_key}"
+        client = f"api-key:{api_key}"
+    elif request.client:
+        client = f"ip:{request.client.host}"
+    else:
+        client = "ip:unknown"
 
-    if request.client:
-        return f"ip:{request.client.host}"
+    if route_path:
+        return f"rate-limit:{route_path}:{client}"
 
-    return "ip:unknown"
+    return f"rate-limit:{client}"
