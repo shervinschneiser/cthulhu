@@ -1,9 +1,10 @@
 from collections.abc import AsyncIterator, Mapping
+from urllib.parse import urlsplit
 
 import httpx
 
 from app.core.config import settings
-from app.gateway.circuit_breaker import CircuitBreaker
+from app.gateway.circuit_breaker_registry import CircuitBreakerRegistry
 from app.proxy.exceptions import (
     ProxyTimeoutError,
     UpstreamUnavailableError,
@@ -30,7 +31,7 @@ class ProxyClient:
             timeout=settings.proxy_timeout,
             follow_redirects=False,
         )
-        self._circuit_breaker = CircuitBreaker()
+        self._circuit_breakers = CircuitBreakerRegistry()
 
     def _prepare_headers(
         self,
@@ -64,6 +65,19 @@ class ProxyClient:
 
         return filtered_headers
 
+    def _get_circuit_breaker(
+        self,
+        url: str,
+    ):
+        parsed = urlsplit(url)
+
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("Invalid upstream URL")
+
+        upstream = f"{parsed.scheme}://{parsed.netloc}"
+
+        return self._circuit_breakers.get(upstream)
+
     async def forward(
         self,
         *,
@@ -73,7 +87,9 @@ class ProxyClient:
         params: Mapping[str, str],
         content: bytes,
     ) -> httpx.Response:
-        if not self._circuit_breaker.allow_request():
+        circuit_breaker = self._get_circuit_breaker(url)
+
+        if not circuit_breaker.allow_request():
             raise UpstreamUnavailableError("Circuit breaker is open")
 
         filtered_headers = self._prepare_headers(headers)
@@ -94,16 +110,19 @@ class ProxyClient:
                 retries=2,
             )
 
-            self._circuit_breaker.record_success()
+            if response.status_code >= 500:
+                circuit_breaker.record_failure()
+            else:
+                circuit_breaker.record_success()
 
             return response
 
         except httpx.ConnectError as exc:
-            self._circuit_breaker.record_failure()
+            circuit_breaker.record_failure()
             raise UpstreamUnavailableError() from exc
 
         except httpx.ReadTimeout as exc:
-            self._circuit_breaker.record_failure()
+            circuit_breaker.record_failure()
             raise ProxyTimeoutError() from exc
 
     async def stream(
@@ -115,7 +134,9 @@ class ProxyClient:
         params: Mapping[str, str],
         content: AsyncIterator[bytes],
     ) -> tuple[httpx.Response, AsyncIterator[bytes]]:
-        if not self._circuit_breaker.allow_request():
+        circuit_breaker = self._get_circuit_breaker(url)
+
+        if not circuit_breaker.allow_request():
             raise UpstreamUnavailableError("Circuit breaker is open")
 
         filtered_headers = self._prepare_headers(headers)
@@ -134,6 +155,11 @@ class ProxyClient:
                 stream=True,
             )
 
+            if response.status_code >= 500:
+                circuit_breaker.record_failure()
+            else:
+                circuit_breaker.record_success()
+
             async def response_stream() -> AsyncIterator[bytes]:
                 try:
                     async for chunk in response.aiter_bytes():
@@ -141,16 +167,14 @@ class ProxyClient:
                 finally:
                     await response.aclose()
 
-            self._circuit_breaker.record_success()
-
             return response, response_stream()
 
         except httpx.ConnectError as exc:
-            self._circuit_breaker.record_failure()
+            circuit_breaker.record_failure()
             raise UpstreamUnavailableError() from exc
 
         except httpx.ReadTimeout as exc:
-            self._circuit_breaker.record_failure()
+            circuit_breaker.record_failure()
             raise ProxyTimeoutError() from exc
 
     async def close(self) -> None:
