@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
 from app.gateway.constants import SUPPORTED_METHODS
-from app.gateway.load_balancer import LoadBalancer
+from app.gateway.load_balancer_registry import LoadBalancerRegistry
 from app.proxy.client import ProxyClient
 from app.proxy.exceptions import (
     ProxyTimeoutError,
@@ -42,14 +42,7 @@ rate_limiter = RateLimiter(
     limit=100,
 )
 
-load_balancers: dict[str, LoadBalancer] = {
-    "/users": LoadBalancer(
-        (
-            "http://localhost:9000",
-            "http://localhost:9001",
-        )
-    ),
-}
+load_balancer_registry = LoadBalancerRegistry()
 
 
 @router.api_route(
@@ -74,14 +67,7 @@ async def gateway(
                 detail="Rate limit exceeded",
             )
 
-        load_balancer = load_balancers.get(route.normalized_path)
-
-        if load_balancer is None:
-            raise HTTPException(
-                status_code=502,
-                detail="No upstream configured",
-            )
-
+        load_balancer = load_balancer_registry.get(route)
         upstream = load_balancer.next()
 
         upstream_url = build_upstream_url(
