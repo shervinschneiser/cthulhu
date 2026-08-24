@@ -10,3 +10,9 @@ class CircuitBreakerRegistry:
             self._breakers[upstream] = CircuitBreaker()
 
         return self._breakers[upstream]
+
+    def has(self, upstream: str) -> bool:
+        return upstream in self._breakers
+
+    def all(self) -> dict[str, CircuitBreaker]:
+        return self._breakers.copy()
