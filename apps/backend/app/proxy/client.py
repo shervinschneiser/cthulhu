@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.core.config import settings
-from app.gateway.circuit_breaker_registry import CircuitBreakerRegistry
+from app.gateway.circuit_registry import CircuitBreakerRegistry
 from app.proxy.exceptions import (
     ProxyTimeoutError,
     UpstreamUnavailableError,
@@ -26,12 +26,15 @@ HOP_BY_HOP_HEADERS = {
 
 
 class ProxyClient:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        circuit_registry: CircuitBreakerRegistry,
+    ) -> None:
         self._client = httpx.AsyncClient(
             timeout=settings.proxy_timeout,
             follow_redirects=False,
         )
-        self._circuit_breakers = CircuitBreakerRegistry()
+        self._circuit_registry = circuit_registry
 
     def _prepare_headers(
         self,
@@ -65,10 +68,7 @@ class ProxyClient:
 
         return filtered_headers
 
-    def _get_circuit_breaker(
-        self,
-        url: str,
-    ):
+    def _get_circuit_breaker(self, url: str):
         parsed = urlsplit(url)
 
         if not parsed.scheme or not parsed.netloc:
@@ -76,7 +76,7 @@ class ProxyClient:
 
         upstream = f"{parsed.scheme}://{parsed.netloc}"
 
-        return self._circuit_breakers.get(upstream)
+        return self._circuit_registry.get(upstream)
 
     async def forward(
         self,
