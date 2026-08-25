@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 
-from app.gateway.circuit_breaker import CircuitBreaker
+from app.gateway.circuit_registry import CircuitBreakerRegistry
 
 
 @dataclass(slots=True)
 class LoadBalancer:
     upstreams: list[str]
-    circuit_breakers: dict[str, CircuitBreaker]
+    circuit_registry: CircuitBreakerRegistry
     _index: int = 0
 
     def next(self) -> str:
@@ -18,7 +18,7 @@ class LoadBalancer:
 
             self._index = (self._index + 1) % len(self.upstreams)
 
-            breaker = self.circuit_breakers[upstream]
+            breaker = self.circuit_registry.get(upstream)
 
             if breaker.allow_request():
                 return upstream
