@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
+from app.gateway.circuit_registry import CircuitBreakerRegistry
 from app.gateway.constants import SUPPORTED_METHODS
 from app.gateway.load_balancer_registry import LoadBalancerRegistry
 from app.proxy.client import ProxyClient
@@ -35,14 +36,20 @@ registry.register(
 resolver = RouteResolver(registry)
 dispatcher = GatewayDispatcher(resolver)
 
-proxy = ProxyClient()
+circuit_registry = CircuitBreakerRegistry()
+
+proxy = ProxyClient(
+    circuit_registry=circuit_registry,
+)
 
 rate_limiter = RateLimiter(
     redis_client,
     limit=100,
 )
 
-load_balancer_registry = LoadBalancerRegistry()
+load_balancer_registry = LoadBalancerRegistry(
+    circuit_registry=circuit_registry,
+)
 
 
 @router.api_route(
@@ -68,6 +75,7 @@ async def gateway(
             )
 
         load_balancer = load_balancer_registry.get(route)
+
         upstream = load_balancer.next()
 
         upstream_url = build_upstream_url(
