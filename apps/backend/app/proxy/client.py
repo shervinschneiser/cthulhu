@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Mapping
+
 from urllib.parse import urlsplit
 
 import httpx
@@ -68,7 +69,10 @@ class ProxyClient:
 
         return filtered_headers
 
-    def _get_circuit_breaker(self, url: str):
+    def _get_circuit_breaker(
+        self,
+        url: str,
+    ):
         parsed = urlsplit(url)
 
         if not parsed.scheme or not parsed.netloc:
@@ -90,7 +94,9 @@ class ProxyClient:
         circuit_breaker = self._get_circuit_breaker(url)
 
         if not circuit_breaker.allow_request():
-            raise UpstreamUnavailableError("Circuit breaker is open")
+            raise UpstreamUnavailableError(
+                "Circuit breaker is open",
+            )
 
         filtered_headers = self._prepare_headers(headers)
 
@@ -137,7 +143,9 @@ class ProxyClient:
         circuit_breaker = self._get_circuit_breaker(url)
 
         if not circuit_breaker.allow_request():
-            raise UpstreamUnavailableError("Circuit breaker is open")
+            raise UpstreamUnavailableError(
+                "Circuit breaker is open",
+            )
 
         filtered_headers = self._prepare_headers(headers)
 
@@ -155,20 +163,6 @@ class ProxyClient:
                 stream=True,
             )
 
-            if response.status_code >= 500:
-                circuit_breaker.record_failure()
-            else:
-                circuit_breaker.record_success()
-
-            async def response_stream() -> AsyncIterator[bytes]:
-                try:
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
-                finally:
-                    await response.aclose()
-
-            return response, response_stream()
-
         except httpx.ConnectError as exc:
             circuit_breaker.record_failure()
             raise UpstreamUnavailableError() from exc
@@ -176,6 +170,25 @@ class ProxyClient:
         except httpx.ReadTimeout as exc:
             circuit_breaker.record_failure()
             raise ProxyTimeoutError() from exc
+
+        async def response_stream() -> AsyncIterator[bytes]:
+            try:
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+
+                if response.status_code >= 500:
+                    circuit_breaker.record_failure()
+                else:
+                    circuit_breaker.record_success()
+
+            except httpx.ReadTimeout as exc:
+                circuit_breaker.record_failure()
+                raise ProxyTimeoutError() from exc
+
+            finally:
+                await response.aclose()
+
+        return response, response_stream()
 
     async def close(self) -> None:
         await self._client.aclose()
