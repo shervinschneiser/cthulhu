@@ -76,7 +76,13 @@ async def gateway(
 
         load_balancer = load_balancer_registry.get(route)
 
-        upstream = load_balancer.next()
+        try:
+            upstream = load_balancer.next()
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="No healthy upstream available",
+            ) from exc
 
         upstream_url = build_upstream_url(
             upstream,
