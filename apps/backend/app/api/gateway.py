@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from app.core.redis import redis_client
 from app.gateway import GatewayDispatcher
 from app.gateway.circuit_registry import CircuitBreakerRegistry
+from app.gateway.concurrency import ConcurrencyLimiter
 from app.gateway.constants import SUPPORTED_METHODS
 from app.gateway.load_balancer_registry import LoadBalancerRegistry
 from app.proxy.client import ProxyClient
@@ -49,6 +50,10 @@ rate_limiter = RateLimiter(
 
 load_balancer_registry = LoadBalancerRegistry(
     circuit_registry=circuit_registry,
+)
+
+concurrency_limiter = ConcurrencyLimiter(
+    limit=100,
 )
 
 
@@ -113,8 +118,10 @@ async def gateway(
             if key.lower() not in excluded_headers
         }
 
+        limited_stream = concurrency_limiter.limit(stream)
+
         return StreamingResponse(
-            stream,
+            limited_stream,
             status_code=response.status_code,
             headers=headers,
             media_type=response.headers.get("content-type"),
