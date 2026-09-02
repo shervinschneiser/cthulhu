@@ -16,7 +16,6 @@ class CircuitBreaker:
     ) -> None:
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
-
         self.failures = 0
         self.state = CircuitState.CLOSED
         self.opened_at: float | None = None
@@ -50,7 +49,6 @@ class CircuitBreaker:
 
         if monotonic() - self.opened_at >= self.recovery_timeout:
             self.state = CircuitState.HALF_OPEN
-            self._half_open_request_in_flight = False
             return False
 
         return True
@@ -60,10 +58,14 @@ class CircuitBreaker:
             return True
 
         if self.state is CircuitState.OPEN:
-            return not self.is_open()
+            if self.is_open():
+                return False
 
-        if self._half_open_request_in_flight:
-            return False
+        if self.state is CircuitState.HALF_OPEN:
+            if self._half_open_request_in_flight:
+                return False
 
-        self._half_open_request_in_flight = True
-        return True
+            self._half_open_request_in_flight = True
+            return True
+
+        return False
