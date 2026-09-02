@@ -1,5 +1,4 @@
 from collections.abc import AsyncIterator, Mapping
-
 from urllib.parse import urlsplit
 
 import httpx
@@ -176,14 +175,23 @@ class ProxyClient:
                 async for chunk in response.aiter_bytes():
                     yield chunk
 
+            except httpx.ReadTimeout as exc:
+                circuit_breaker.record_failure()
+                raise ProxyTimeoutError() from exc
+
+            except httpx.HTTPError:
+                circuit_breaker.record_failure()
+                raise
+
+            except Exception:
+                circuit_breaker.record_failure()
+                raise
+
+            else:
                 if response.status_code >= 500:
                     circuit_breaker.record_failure()
                 else:
                     circuit_breaker.record_success()
-
-            except httpx.ReadTimeout as exc:
-                circuit_breaker.record_failure()
-                raise ProxyTimeoutError() from exc
 
             finally:
                 await response.aclose()
