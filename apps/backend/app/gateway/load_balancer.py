@@ -15,12 +15,11 @@ class LoadBalancer:
 
         for _ in range(len(self.upstreams)):
             upstream = self.upstreams[self._index]
-
             self._index = (self._index + 1) % len(self.upstreams)
 
             breaker = self.circuit_registry.get(upstream)
 
-            if breaker.allow_request():
+            if not breaker.is_open():
                 return upstream
 
         raise RuntimeError("No healthy upstream available")
